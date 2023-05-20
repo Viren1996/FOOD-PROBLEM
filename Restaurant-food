@@ -127,25 +127,61 @@ ORDER BY customer_id;
 
 10) In the first week after a customer joins the program (including their join date) they earn 2x points on all items, not just pizza - how many points do customer A and B have at the end of January?
 
-WITH points_table AS
-(
-SELECT mm.customer_id,s.product_id,
-    CASE
-         WHEN s.product_id = 1 THEN 20
-         WHEN s.product_id = 2 THEN 30
-         WHEN s.product_id = 3 THEN 24
-    END AS points
-FROM sales s
-JOIN members AS mm
-ON s.customer_id = mm.customer_id
-WHERE s.order_date >= mm.join_date
-)
 SELECT customer_id,
-SUM(points) AS total_points
-FROM points_table
-WHERE customer_id IN('A','B')
+SUM(
+        CASE
+                WHEN first_week = 'Y' THEN price * 20
+            ELSE CASE
+                WHEN product_name = 'pizza' THEN price * 20
+                ELSE price * 10
+            END
+            END
+    ) AS customer_points
+FROM (
+        WITH joined_table AS(
+            SELECT S.customer_id,
+                MB.join_date,
+                S.order_date,
+                S.product_id,
+                MU.product_name,
+                MU.price,
+                CASE
+                    WHEN (S.order_date >= MB.join_date) THEN 'Y'
+                    else 'N'
+                END AS member,
+                CASE
+                    WHEN (S.order_date - MB.join_date) BETWEEN 0 and 6 THEN 'Y'
+                    else 'N'
+                END AS first_week
+            FROM sales AS S
+                LEFT JOIN menu AS MU ON S.product_id = MU.product_id
+                LEFT JOIN members as MB ON S.customer_id = MB.customer_id
+            ORDER BY customer_id,
+                order_date
+        )
+        SELECT customer_id,
+            join_date,
+            order_date,
+            product_id,
+            product_name,
+            price,
+            member,
+            first_week,
+            CASE
+                    WHEN member = 'Y' THEN rank() OVER (
+                    PARTITION BY customer_id,
+                    member
+                    ORDER BY order_date
+                )
+            ELSE NULL
+            END as ranking
+        FROM joined_table
+    ) as ranking_table
+WHERE member = 'Y'
 GROUP BY customer_id
 ORDER BY customer_id;
+
+
 
 
 
